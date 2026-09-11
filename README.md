@@ -171,7 +171,6 @@ cordis.patch.yml             the profile patch that mounts the row
 tests/load-artifact.mjs      artifact smoke test (module-loader contract)
 tests/browser-smoke.mjs      headless render check (needs an unrestricted browser)
 tests/zoom.html              two-instance harness proving zoom is per-view
-examples/preview-smoke.mmd   a sample diagram
 ```
 
 ## License
