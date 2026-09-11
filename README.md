@@ -157,19 +157,6 @@ number at every zoom step. To reach a real browser from an agent session, the
 forbids launching one: the extension dials out as a client, so the agent only has
 to accept that socket and can then `eval` in the tab.
 
-## Pending cleanup
-
-`$DSH_HOME/profiles/web/cordis.patch.yml` currently carries a **temporary**
-`mermaid-preview` insert row. It was added to hot-mount the plugin without
-restarting `dsh web` while it was being iterated on. The plugin's own
-`dsh.bundle` layer mounts the same row on the next start, so that entry should be
-removed to avoid mounting it twice:
-
-```sh
-# after the next restart of dsh web
-$EDITOR "$DSH_HOME/profiles/web/cordis.patch.yml"   # drop the - insert: block
-```
-
 ## Layout
 
 ```
