@@ -1,0 +1,10 @@
+# Normalize every text file to LF in the repository. The package is consumed by
+# a Node toolchain and a browser bundler, where CRLF in shell/YAML/JSON sources
+# is a portability hazard rather than a courtesy to Windows editors.
+* text=auto eol=lf
+
+# Binary assets are stored verbatim.
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary

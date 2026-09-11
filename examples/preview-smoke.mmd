@@ -1,0 +1,11 @@
+%% A sample Mermaid diagram for verifying the .mmd preview.
+%% Open this file in the DSH right-sidebar document viewer.
+flowchart TD
+    A[Open .mmd in the sidebar] --> B{Preview implementation registered?}
+    B -- yes --> C[Mermaid renders the diagram]
+    B -- no --> D[Plain highlighted source]
+    C --> E{Theme is dark?}
+    E -- yes --> F[Dark palette]
+    E -- no --> G[Light palette]
+    F --> H[Done]
+    G --> H

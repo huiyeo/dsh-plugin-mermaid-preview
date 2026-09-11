@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output. The harness serves lib/client.js and never reads sources, so a
+# clone must run `pnpm run build` before it can be installed as a profile layer
+# — see README "Install". Checked-in artifacts would be ~18 MB per revision
+# (mermaid is inlined into the single client bundle).
+lib/
+*.tsbuildinfo
+
+# Test scaffolding output
+tests/dist/
+
+# Logs and local state
+*.log
+.DS_Store
+Thumbs.db

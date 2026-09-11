@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mermaid-preview smoke</title>
+    <style>
+      /* Stand-ins for the shell tokens the plugin stylesheet reads. */
+      :root {
+        --dsw-alias-label-primary: #1a1a1a;
+        --dsw-alias-label-secondary: #5c5c5c;
+        --dsw-alias-border-l4: rgba(0, 0, 0, 0.32);
+        --dsw-alias-markdown-code-block: #f7f8fa;
+        --dsw-alias-brand-primary: #2f6feb;
+      }
+      body { margin: 0; font-family: sans-serif; }
+      #root { width: 720px; }
+    </style>
+    <script type="module" src="/tests/dist/browser-run.js"></script>
+  </head>
+  <body data-smoke="pending">
+    <div id="root"></div>
+    <script type="module">
+      // The renderer is asynchronous. Poll the pane, then hand the outcome back
+      // to the test runner over HTTP: a child process's piped stdout is not
+      // capturable under the harness sandbox, so `--dump-dom` is not usable.
+      const report = (state) => {
+        document.body.dataset.smoke = state
+        const payload = JSON.stringify({
+          state,
+          html: document.documentElement.outerHTML,
+          consoleErrors: window.__smokeErrors ?? [],
+        })
+        return fetch('/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload })
+      }
+
+      window.__smokeErrors = []
+      window.addEventListener('error', event => { window.__smokeErrors.push(String(event.message)) })
+      window.addEventListener('unhandledrejection', event => { window.__smokeErrors.push(String(event.reason)) })
+
+      const readState = () => {
+        const pane = document.querySelector('[data-mermaid-state]')
+        return pane === null ? null : pane.getAttribute('data-mermaid-state')
+      }
+
+      const deadline = Date.now() + 30000
+      const poll = setInterval(() => {
+        const state = readState()
+        if (state === null) {
+          if (Date.now() > deadline) { clearInterval(poll); void report('timeout-no-pane') }
+          return
+        }
+        if (state === 'rendering') {
+          if (Date.now() > deadline) { clearInterval(poll); void report('timeout-rendering') }
+          return
+        }
+        clearInterval(poll)
+        void report(state)
+      }, 50)
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+packages:
+  - '.'
+
+# The plugin build resolves the harness toolchain (tsdown, its rolldown
+# dependency, react types) from the DSH checkout one level up, which is not a
+# pnpm workspace member. Public registry access is only needed for mermaid.

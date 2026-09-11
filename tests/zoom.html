@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mermaid-preview zoom smoke</title>
+    <style>
+      :root {
+        --dsw-alias-label-primary: #1a1a1a;
+        --dsw-alias-label-secondary: #5c5c5c;
+        --dsw-alias-border-l4: rgba(0, 0, 0, 0.32);
+        --dsw-alias-markdown-code-block: #f7f8fa;
+        --dsw-alias-brand-primary: #2f6feb;
+      }
+      body { margin: 0; font-family: sans-serif; }
+      /* Two side-by-side hosts, each with its own definite height, the way the
+         document body gives one renderer a definite height. */
+      .hosts { display: flex; gap: 12px; }
+      .host { width: 360px; height: 420px; overflow: hidden; }
+    </style>
+    <script type="module" src="/tests/dist/zoom-run.js"></script>
+  </head>
+  <body data-zoom="pending">
+    <div class="hosts">
+      <div class="host" id="a"></div>
+      <div class="host" id="b"></div>
+    </div>
+    <script type="module">
+      const failures = []
+      const steps = []
+      const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+      const canvasOf = (root) => root.querySelector('[data-mermaid-canvas]')
+      const readoutOf = (root) => root.querySelector('[data-mermaid-zoom-readout]')
+      const buttonOf = (root, key) => root.querySelector(`[data-mermaid-tools] button[aria-label="${key}"]`)
+
+      const check = (ok, message) => { if (!ok) failures.push(message) }
+
+      try {
+        // Wait for both diagrams to finish rendering.
+        const deadline = Date.now() + 25000
+        for (;;) {
+          const a = document.getElementById('a')
+          const ready = a?.querySelector('[data-mermaid-state="ready"]') !== null
+            && document.getElementById('b')?.querySelector('[data-mermaid-state="ready"]') !== null
+          if (ready) break
+          if (Date.now() > deadline) throw new Error('diagrams never reached the ready state')
+          await wait(50)
+        }
+        await wait(300)
+
+        const a = document.getElementById('a')
+        const b = document.getElementById('b')
+        const widthOf = (root) => canvasOf(root)?.getBoundingClientRect().width ?? 0
+
+        const baseA = widthOf(a)
+        const baseB = widthOf(b)
+        steps.push(`initial canvas widths: a=${baseA.toFixed(1)} b=${baseB.toFixed(1)}`)
+        check(baseA > 0 && baseB > 0, 'a canvas has no measurable width at 100%')
+        check(readoutOf(a)?.textContent?.trim() === '100%', `unexpected initial readout: ${readoutOf(a)?.textContent}`)
+
+        // Zoom A in twice through the real buttons.
+        buttonOf(a, 'Zoom in').click()
+        await wait(250)
+        buttonOf(a, 'Zoom in').click()
+        await wait(250)
+        const zoomedA = widthOf(a)
+        steps.push(`after two zoom-in clicks on a: a=${zoomedA.toFixed(1)} readout=${readoutOf(a)?.textContent?.trim()}`)
+        check(zoomedA > baseA * 1.2, `a did not grow after zoom in (${baseA.toFixed(1)} -> ${zoomedA.toFixed(1)})`)
+
+        // The other diagram must be untouched: this is the whole point.
+        const untouchedB = widthOf(b)
+        steps.push(`b during a's zoom: b=${untouchedB.toFixed(1)} readout=${readoutOf(b)?.textContent?.trim()}`)
+        check(Math.abs(untouchedB - baseB) < 1, `b changed while a was zoomed (${baseB.toFixed(1)} -> ${untouchedB.toFixed(1)})`)
+        check(readoutOf(b)?.textContent?.trim() === '100%', `b readout changed: ${readoutOf(b)?.textContent}`)
+
+        // Ctrl+wheel over B zooms B only.
+        canvasOf(b)?.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, ctrlKey: true, bubbles: true, cancelable: true }))
+        await wait(250)
+        const wheeledB = widthOf(b)
+        steps.push(`after ctrl+wheel on b: b=${wheeledB.toFixed(1)} readout=${readoutOf(b)?.textContent?.trim()}`)
+        check(wheeledB > baseB, `ctrl+wheel did not zoom b (${baseB.toFixed(1)} -> ${wheeledB.toFixed(1)})`)
+        check(Math.abs(widthOf(a) - zoomedA) < 1, 'a changed while b was wheel-zoomed')
+
+        // A plain wheel must stay a scroll, not a zoom.
+        const beforePlain = widthOf(b)
+        canvasOf(b)?.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true, cancelable: true }))
+        await wait(200)
+        check(Math.abs(widthOf(b) - beforePlain) < 1, 'a plain wheel zoomed the diagram')
+
+        // Reset returns exactly to 100%.
+        buttonOf(a, 'Reset').click()
+        await wait(250)
+        const resetA = widthOf(a)
+        steps.push(`after reset on a: a=${resetA.toFixed(1)} readout=${readoutOf(a)?.textContent?.trim()}`)
+        check(Math.abs(resetA - baseA) < 1, `reset did not restore 100% (${baseA.toFixed(1)} -> ${resetA.toFixed(1)})`)
+
+        // The bottom rung disables zoom-out rather than going below it.
+        for (let index = 0; index < 12; index++) {
+          const button = buttonOf(a, 'Zoom out')
+          if (button?.disabled === true) break
+          button?.click()
+          await wait(120)
+        }
+        check(buttonOf(a, 'Zoom out')?.disabled === true, 'zoom out never reached its disabled limit')
+        steps.push(`zoom-out limit readout: ${readoutOf(a)?.textContent?.trim()}`)
+      } catch (error) {
+        failures.push(String(error))
+      }
+
+      document.body.dataset.zoom = failures.length === 0 ? 'ok' : 'failed'
+      await fetch('/report', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ failures, steps }),
+      })
+    </script>
+  </body>
+</html>

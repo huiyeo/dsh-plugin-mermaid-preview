@@ -1,0 +1,61 @@
+{
+  "name": "dsh-plugin-mermaid-preview",
+  "description": "Mermaid diagram previews for the DeepSeek Harness right-sidebar document viewer (.mmd and .mermaid files)",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huiyeo/dsh-plugin-mermaid-preview.git"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "mermaid",
+    "diagram",
+    "preview"
+  ],
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "external": []
+    }
+  },
+  "scripts": {
+    "build": "node ./build.mjs",
+    "test": "node tests/load-artifact.mjs",
+    "test:browser": "tsdown --config tsdown.smoke.config.ts && node tests/browser-smoke.mjs && node tests/zoom-smoke.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "dependencies": {
+    "mermaid": "^11.16.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.1",
+    "typescript": "^5.0.0 || ^6.0.0"
+  }
+}

@@ -1,0 +1,9 @@
+# dsh-plugin-mermaid-preview — profile layer.
+#
+# One row, both faces of the package: the host half of a dual-face client
+# plugin contributes nothing to the host tree but must mount for the client
+# module scan to see the package's `dsh.client` declaration and serve
+# `lib/client.js` to the browser.
+- insert:
+    - id: mermaid-preview
+      name: dsh-plugin-mermaid-preview
