@@ -1,16 +1,25 @@
 /**
  * Browser half of dsh-plugin-mermaid-preview.
  *
- * Contributes one document-preview implementation through the public extension
- * points only: metadata into `ctx.documentPreviews`, the body into the keyed
- * `sidebar.right.tab.document` seat under the same id, and copy into the
- * locale service. Nothing here reaches into the sidebar's store, its panes, or
- * its sequence.
+ * Two surfaces, one renderer behind both:
+ *
+ * - A document-preview implementation for `.mmd` / `.mermaid` files, registered
+ *   through `ctx.documentPreviews` with its body in the keyed
+ *   `sidebar.right.tab.document` seat.
+ * - A ```mermaid fence renderer for chat messages, registered with the
+ *   `registeredFences` registry that `ui-primitives` shares. That registry is a
+ *   module-level singleton in a module the harness serves to the whole page, so
+ *   the transcript picks this up without the chat package knowing about it.
+ *
+ * Nothing here reaches into the sidebar's store, its panes, or its sequence.
  */
+import { createElement } from 'react'
+import { registeredFences } from '@deepseek-ai/dsh-client-ui-primitives'
 import { MermaidBody } from './MermaidBody.tsx'
+import { MermaidFence } from './MermaidFence.tsx'
 import { en, NS, zh } from './locales.ts'
 import { installStyles } from './styles.ts'
-import type { PluginContext } from './types.ts'
+import type { PluginContext, RegisteredFences } from './types.ts'
 
 /**
  * Implementation identity, shared by the metadata registration and the slot
@@ -18,6 +27,23 @@ import type { PluginContext } from './types.ts'
  * renderer, which is the only other implementation matching these suffixes.
  */
 export const MERMAID_BODY_ID = 'dsh-plugin-mermaid-preview'
+
+/** The fence info this plugin claims in chat messages. */
+export const MERMAID_FENCE_LANGUAGE = 'mermaid'
+
+/**
+ * Whether a harness's `ui-primitives` exposes the Markdown fence registry.
+ *
+ * A plugin published to a registry runs against harnesses older than the seam it
+ * wants, so the capability is probed rather than assumed.
+ * @param candidate - the module's `registeredFences` export, or undefined.
+ * @returns true when it is usable as a registry.
+ */
+function isFenceRegistry(candidate: unknown): candidate is RegisteredFences {
+  return typeof candidate === 'object'
+    && candidate !== null
+    && typeof (candidate as { register?: unknown }).register === 'function'
+}
 
 /**
  * Required browser services. `slots` and `locale` are provided by the shell;
@@ -27,7 +53,8 @@ export const MERMAID_BODY_ID = 'dsh-plugin-mermaid-preview'
 export const inject = ['slots', 'locale', 'documentPreviews'] as const
 
 /**
- * Plugin body: register the metadata, the body, the stylesheet, and the copy.
+ * Plugin body: register the copy, the stylesheet, the file preview, and the
+ * chat fence language.
  * @param ctx - client context carrying the registries this plugin contributes to.
  */
 export function apply(ctx: PluginContext): void {
@@ -53,4 +80,32 @@ export function apply(ctx: PluginContext): void {
     { name: 'sidebar.right.tab.document', key: MERMAID_BODY_ID, locale: NS },
     MermaidBody,
   )), 'mermaid-preview: body')
+
+  // The chat side. Registration is owned by this fiber, so unloading the plugin
+  // releases the language and the fences fall back to their code blocks.
+  //
+  // Guarded on purpose: `registeredFences` is a registry the harness gained
+  // alongside this plugin, and a harness without it ships a `ui-primitives`
+  // whose module has no such export. An unguarded call would throw inside
+  // `apply` and take the `.mmd` preview down with it, so a host that predates
+  // the seam keeps the file preview and simply keeps rendering ```mermaid
+  // fences as code blocks.
+  //
+  // The renderer returns an ELEMENT rather than calling the component: the
+  // renderer result is inserted as a child, and invoking a hook-using component
+  // as a plain function would break the rules of hooks.
+  if (isFenceRegistry(registeredFences)) {
+    const fences = registeredFences
+    ctx.effect(
+      () => fences.register(MERMAID_FENCE_LANGUAGE, (code, streaming) => (
+        createElement(MermaidFence, { code, streaming })
+      )),
+      'mermaid-preview: chat fence',
+    )
+  } else {
+    ctx.logger?.info?.(
+      'mermaid-preview: this harness has no Markdown fence registry, so chat ```mermaid blocks stay code blocks '
+      + '(the .mmd file preview is unaffected)',
+    )
+  }
 }

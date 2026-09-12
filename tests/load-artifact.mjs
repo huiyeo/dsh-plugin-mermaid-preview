@@ -5,8 +5,10 @@
  *
  * This is not a substitute for the browser, but it does verify the parts a
  * build can silently get wrong: the `__ModuleLoader__.load` handoff, the
- * CommonJS factory contract, the set of external specifiers the factory asks
- * the module table for, and that `apply` reaches all four registries.
+ * CommonJS factory contract, the external specifiers the factory asks the module
+ * table for, that `apply` reaches every registry, and that the chat fence
+ * registers into the SHARED `ui-primitives` registry rather than a bundled copy
+ * of it.
  *
  * Run with the DSH checkout's react on the resolution path:
  *   node tests/load-artifact.mjs
@@ -22,9 +24,35 @@ const bundlePath = join(here, '..', 'lib', 'client.js')
 // dependencies were materialized.
 const require = createRequire(import.meta.url)
 
+/**
+ * A stub of the harness's shared `ui-primitives` module-table entry.
+ *
+ * Recording what the plugin registers here is the point: if the bundle had
+ * INLINED its own copy of `ui-primitives` instead of requiring the shared one,
+ * the plugin would register into that private copy, the transcript would read
+ * the shared registry, and the diagram would silently never render.
+ */
+const fenceRegistrations = new Map()
+const registeredFences = {
+  register(language, renderer) {
+    if (fenceRegistrations.has(language)) throw new Error(`duplicate language ${language}`)
+    fenceRegistrations.set(language, renderer)
+    let active = true
+    return () => {
+      if (!active) return
+      active = false
+      fenceRegistrations.delete(language)
+    }
+  },
+  forLanguage(language) {
+    return fenceRegistrations.get(language) ?? null
+  },
+}
+
 const seed = new Map([
   ['react', require('react')],
   ['react/jsx-runtime', require('react/jsx-runtime')],
+  ['@deepseek-ai/dsh-client-ui-primitives', { registeredFences }],
 ])
 
 let registration
@@ -130,7 +158,25 @@ check(slotRegistration?.key === previewDefinition?.id, 'slot cell key and metada
 check(slotRegistration?.locale === 'mermaidPreview', `unexpected locale namespace: ${slotRegistration?.locale}`)
 check(styleTag?.dataset?.plugin === 'dsh-plugin-mermaid-preview', 'stylesheet was not injected with the plugin tag')
 
+// The chat fence. Asserted BEFORE the disposers run, because releasing the
+// plugin's effects must unregister the language.
+const fenceRenderer = registeredFences.forLanguage('mermaid')
+check(fenceRenderer !== null, 'the mermaid fence language was not registered into the shared registry')
+check(typeof fenceRenderer === 'function', 'the mermaid fence renderer is not callable')
+if (typeof fenceRenderer === 'function') {
+  // Shape only. `MarkdownText` renders whatever this returns as a child element,
+  // and the renderer is a component with hooks, so it cannot be invoked outside
+  // React — drawing it is the browser test's job.
+  const element = fenceRenderer('flowchart TD\n  A --> B\n', false)
+  check(element !== null && typeof element === 'object', 'the mermaid fence renderer did not return an element')
+}
+
 for (const dispose of disposers) dispose()
+
+check(
+  registeredFences.forLanguage('mermaid') === null,
+  'releasing the plugin left the mermaid fence language registered',
+)
 
 if (failures.length > 0) {
   console.error('FAIL')

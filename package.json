@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-mermaid-preview",
-  "description": "Mermaid diagram previews for the DeepSeek Harness right-sidebar document viewer (.mmd and .mermaid files)",
-  "version": "0.1.0",
+  "description": "Mermaid diagrams in DeepSeek Harness: .mmd file previews in the document sidebar, and ```mermaid fences rendered inside chat messages",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -14,7 +14,8 @@
     "deepseek-harness",
     "mermaid",
     "diagram",
-    "preview"
+    "preview",
+    "markdown"
   ],
   "main": "lib/index.js",
   "exports": {
@@ -37,19 +38,29 @@
     },
     "client": {
       "platform": "web",
-      "external": []
+      "external": [
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ]
     }
   },
   "scripts": {
     "build": "node ./build.mjs",
-    "test": "node tests/load-artifact.mjs",
+    "prepublishOnly": "node ./build.mjs",
+    "test": "node tests/load-artifact.mjs && node tests/load-artifact-legacy.mjs",
     "test:browser": "tsdown --config tsdown.smoke.config.ts && node tests/browser-smoke.mjs && node tests/zoom-smoke.mjs",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-client-ui-primitives": "*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-client-ui-primitives": { "optional": true },
+    "react": { "optional": true },
+    "react-dom": { "optional": true }
   },
   "dependencies": {
     "mermaid": "^11.16.0"

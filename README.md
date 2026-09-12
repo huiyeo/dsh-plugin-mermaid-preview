@@ -1,21 +1,32 @@
 # dsh-plugin-mermaid-preview
 
-Mermaid diagram previews for the DeepSeek Harness right-sidebar document viewer.
-Open a `.mmd` or `.mermaid` file in the sidebar and the diagram is drawn instead
-of the source being listed as plain text.
+Mermaid diagrams in DeepSeek Harness, in the two places they belong:
+
+- **`.mmd` / `.mermaid` files** open in the right-sidebar document viewer as
+  diagrams instead of plain text.
+- **` ```mermaid ` fences in chat messages** render as diagrams instead of
+  syntax-highlighted code blocks.
 
 ## What it does
 
 - Registers a **document-preview implementation** for the `mmd` and `mermaid`
   file suffixes through the harness's public `documentPreviews` extension point.
-- Renders the diagram with [mermaid](https://mermaid.js.org/) 11, bundled into
-  the plugin's own client artifact.
+- Claims the **`mermaid` Markdown fence language** through `ui-primitives`'s
+  fence registry, so chat transcripts render the diagram with no cooperation
+  from the chat package.
+- Renders with [mermaid](https://mermaid.js.org/) 11, bundled into the plugin's
+  own client artifact. Both surfaces share one runtime (configuration, palette
+  sampling, measurement, device-pixel sizing), so a diagram cannot look right in
+  one place and wrong in the other.
 - Follows the shell's light/dark palette and re-renders when the theme changes.
 - Zooms per diagram view: `−` / percentage / `+` / `重置` in a small control under
   the diagram, plus Ctrl (or ⌘) + wheel over it. 100% means "fills the pane
   width", the remembered zoom is a view preference rather than document state,
   and each preview tab keeps its own zoom because the state lives in the
   renderer instance.
+- In chat, a fence that is still streaming keeps its code block until the body is
+  complete: a half-drawn diagram is worse than the source the reader can already
+  see.
 - Falls back to showing the source, with the parse error above it, when a
   diagram does not parse — a file the agent is still writing is the common case,
   so a failed render never hides the content.
@@ -25,25 +36,30 @@ Supported diagram types are mermaid's own: flowchart, sequence, class, state,
 entity-relationship, gantt, pie, git graph, mindmap, timeline, quadrant,
 requirement, sankey, block, architecture, and the rest.
 
-## What it does not do
-
-**Mermaid fenced code blocks inside chat messages are not rendered.** The chat
-Markdown pipeline (`@deepseek-ai/dsh-client-ui-primitives`, `src/markdown/render.tsx`)
-maps a fenced block to a `switch` arm over mdast node types and always renders
-`<CodeBlock>`; the only language it special-cases is `math`. There is no
-registry, prop, or service a third-party client plugin can use to claim a
-language, so a ` ```mermaid ` block in a message keeps its syntax-highlighted
-code block. Rendering those would mean patching that package in the DSH
-checkout — a product change, not a plugin.
-
 ## Requirements
 
 - DSH with the `web` profile (`@deepseek-ai/dsh-web-app`), which mounts
   `@deepseek-ai/dsh-client-ui-sidebar-documentpreview`. The plugin stays parked
   until that viewer is mounted, because `documentPreviews` is the service it
   extends.
+- **Chat fences additionally need a harness that has the Markdown fence
+  registry** — a `ui-primitives` exporting `registeredFences`. On an older
+  harness the `.mmd` preview works normally and ` ```mermaid ` blocks keep
+  rendering as code blocks; the plugin logs one line saying so. It does not fail,
+  and it does not take the file preview down with it.
 
 ## Install
+
+### From npm
+
+```sh
+dsh plugin --profile web add dsh-plugin-mermaid-preview
+```
+
+The published tarball ships the built artifacts, and `prepublishOnly` rebuilds
+them before every release.
+
+### From a checkout
 
 The harness serves the built `lib/client.js` and never reads sources, and build
 output is not committed, so **build first**:
@@ -161,16 +177,20 @@ to accept that socket and can then `eval` in the tab.
 
 ```
 src/index.js                 host half (empty by design)
-src/client/index.ts          plugin body: metadata, slot cell, locale, styles
-src/client/MermaidBody.tsx   the renderer
+src/client/index.ts          plugin body: file-preview registration + chat fence claim
+src/client/MermaidBody.tsx   the document-preview renderer (owns its zoom)
+src/client/MermaidFence.tsx  the chat fence renderer (falls back to the code block)
+src/client/mermaid-runtime.ts  shared by both: config, palette, measurement, sizing
 src/client/theme.ts          shell palette sampling + dark-mode subscription
 src/client/locales.ts        zh/en copy
 src/client/styles.ts         plugin-owned stylesheet, injected with a tagged tag
 src/client/types.ts          the minimal ambient contracts this package compiles against
 cordis.patch.yml             the profile patch that mounts the row
-tests/load-artifact.mjs      artifact smoke test (module-loader contract)
+tests/load-artifact.mjs      loads the artifact; asserts the shared-registry contract
+tests/load-artifact-legacy.mjs  asserts clean degradation without the fence registry
 tests/browser-smoke.mjs      headless render check (needs an unrestricted browser)
 tests/zoom.html              two-instance harness proving zoom is per-view
+examples/preview-smoke.mmd   a sample diagram
 ```
 
 ## License

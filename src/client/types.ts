@@ -110,14 +110,18 @@ export interface LocaleService {
   bind(namespace: string): LocaleBinding
 }
 
-/**
- * The plugin context this client half uses: the three registries it contributes
- * to, plus the effect seam that ties every contribution to the plugin's fiber.
- */
+/** The plugin context this client half uses: the registries it contributes to,
+ * the effect seam that ties every contribution to the plugin's fiber, and the
+ * Cordis logger for degradation notices. */
 export interface PluginContext {
   readonly documentPreviews: DocumentPreviewRegistry
   readonly slots: SlotRegistry
   readonly locale: LocaleService
+  /** Cordis logger; optional because a host may provide none. */
+  readonly logger?: {
+    info?(message: string): void
+    warn?(message: string): void
+  } | undefined
   /**
    * Register a side effect owned by this plugin's fiber.
    * @param callback - returns an optional disposer.
@@ -151,3 +155,42 @@ declare global {
     load(registration: { id: string; factory: (require: (specifier: string) => unknown) => unknown }): void
   }
 }
+
+/**
+ * The slice of `@deepseek-ai/dsh-client-ui-primitives` this plugin consumes: the
+ * Markdown renderer's fence-language registry.
+ *
+ * Declared here rather than imported because the package ships no published
+ * types to an out-of-tree plugin. The names must match the real package — it is
+ * a shared module-table entry, so the value at runtime is the harness's own, and
+ * a mismatch here would be a compile-time fiction over a working import.
+ */
+declare module '@deepseek-ai/dsh-client-ui-primitives' {
+  /** Renders one claimed fenced code block; null falls back to the code block. */
+  export type MarkdownFenceRenderer = (code: string, streaming: boolean) => ReactElement | null
+
+  /** Claims fence languages for every Markdown surface on the page. */
+  export interface MarkdownFences {
+    /**
+     * Resolve one fence info to its renderer.
+     * @param language - the fence info's language token, lower-cased.
+     * @returns the renderer, or null to fall through to the default code block.
+     */
+    forLanguage(language: string): MarkdownFenceRenderer | null
+  }
+
+  /** The process-wide registry a feature package registers its languages into. */
+  export interface RegisteredFences extends MarkdownFences {
+    /**
+     * Claim one fence language.
+     * @param language - the fence info token, matched case-insensitively.
+     * @param renderer - renders every fence of that language.
+     * @returns an idempotent disposer releasing the claim.
+     */
+    register(language: string, renderer: MarkdownFenceRenderer): () => void
+  }
+
+  /** The shared registry instance. */
+  export const registeredFences: RegisteredFences
+}
+

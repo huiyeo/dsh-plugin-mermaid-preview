@@ -23,6 +23,8 @@ export const styles = {
   tools: 'dsh-mermaid-tools',
   tool: 'dsh-mermaid-tool',
   readout: 'dsh-mermaid-readout',
+  fence: 'dsh-mermaid-fence',
+  fenceCanvas: 'dsh-mermaid-fence-canvas',
 } as const
 
 const CSS = `
@@ -146,6 +148,26 @@ const CSS = `
   text-align: center;
   font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-secondary, inherit);
+}
+/* A diagram inside a chat message. It borrows the message column's width rather
+   than owning a scroller: a transcript row must not introduce its own
+   horizontal scrollport, and mermaid sizes the SVG with useMaxWidth. */
+.dsh-mermaid-fence {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+.dsh-mermaid-fence-canvas {
+  max-width: 100%;
+}
+.dsh-mermaid-fence-canvas > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  /* Vector geometry must not be snapped to the device pixel grid; see the
+     document preview's rule for the same reason. */
+  shape-rendering: geometricPrecision;
 }
 `
 
