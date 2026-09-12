@@ -1,50 +1,74 @@
 # Publish dsh-plugin-mermaid-preview to npm.
 #
-# Why a script: the npm cache lives outside this session's writable workspace, so
-# every npm command here has to point `--cache` somewhere local. After `npm login`
-# the default cache works again, but keeping it explicit makes the run
-# reproducible from this checkout either way.
+# Why a token instead of `npm login`: this machine runs npm 12, whose `npm login`
+# drives a web flow. The legacy `/-/v1/login` endpoint the CLI falls back to in a
+# terminal no longer exists (it answers 401), which is what surfaced as
+# `ECONNRESET`. A Granular Access Token skips that endpoint entirely — the
+# registry authenticates the publish request directly.
 #
+# Usage:
+#   $env:NPM_TOKEN = 'npm_xxxxxxxx'      # token with read+write for this package
 #   pwsh -File publish-npm.ps1
 #
-# The script stops before publishing if the registry has no credentials: the
-# login is interactive (browser or OTP) and cannot be automated.
+#   pwsh -File publish-npm.ps1 -DryRun   # everything except the real publish
+#
+# If NPM_TOKEN is unset the script explains how to create one and exits; it never
+# prompts, because an interactive prompt cannot complete in a non-interactive
+# shell.
+
+param(
+  [switch]$DryRun
+)
 
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$cache = Join-Path (Split-Path -Parent (Split-Path -Parent $here)) '.npm-cache'
-New-Item -ItemType Directory -Force -Path $cache | Out-Null
-
 Push-Location $here
 try {
-  $who = (& npm whoami --cache $cache 2>&1 | Out-String).Trim()
-  if ($LASTEXITCODE -ne 0) {
-    Write-Host 'Not logged in to npm. Run this first (interactive):' -ForegroundColor Yellow
-    Write-Host "  npm login --cache $cache"
-    Write-Host ''
-    Write-Host 'Then re-run this script.'
-    exit 1
+  $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+  Write-Host "package: $($pkg.name)@$($pkg.version)"
+
+  $extra = @()
+  if ($env:NPM_TOKEN) {
+    # Passed per-invocation, so nothing is written to any .npmrc.
+    $extra = @("--//registry.npmjs.org/:_authToken=$($env:NPM_TOKEN)")
+    Write-Host 'auth: NPM_TOKEN from the environment'
+  } else {
+    $who = (& npm whoami 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host ''
+      Write-Host 'No npm credentials found. Create a Granular Access Token, then re-run:' -ForegroundColor Yellow
+      Write-Host '  1. https://www.npmjs.com/settings/~/tokens  ->  Generate New Token  ->  Granular Access Token'
+      Write-Host '  2. Permissions: Read and write.  Packages: the package name (or all).'
+      Write-Host '  3. Copy the token, then:'
+      Write-Host '       $env:NPM_TOKEN = ''npm_xxxxxxxx'''
+      Write-Host '       pwsh -File publish-npm.ps1'
+      exit 1
+    }
+    Write-Host "auth: logged in as $who"
   }
-  Write-Host "npm user: $who"
 
-  $name = (Get-Content package.json -Raw | ConvertFrom-Json).name
-  $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-  Write-Host "publishing $name@$version"
+  # Dry run first: runs prepublishOnly (the build, so lib/ is current), shows the
+  # exact tarball, touches no registry, and catches a bad token early.
   Write-Host ''
-
-  # --dry-run first: shows the exact tarball and runs prepublishOnly (the build)
-  # without touching the registry.
-  & npm publish --dry-run --cache $cache
+  Write-Host '--- dry run ---'
+  & npm publish --dry-run @extra
   if ($LASTEXITCODE -ne 0) { throw 'dry run failed; nothing was published' }
 
+  if ($DryRun) {
+    Write-Host ''
+    Write-Host 'Dry run requested; stopping before the real publish.' -ForegroundColor Cyan
+    exit 0
+  }
+
   Write-Host ''
-  Write-Host 'Dry run clean. Publishing for real...' -ForegroundColor Cyan
-  & npm publish --cache $cache
+  Write-Host '--- publishing ---'
+  & npm publish @extra
   if ($LASTEXITCODE -ne 0) { throw 'publish failed' }
 
   Write-Host ''
-  Write-Host "published $name@$version" -ForegroundColor Green
-  Write-Host "verify: npm view $name version"
+  Write-Host "published $($pkg.name)@$($pkg.version)" -ForegroundColor Green
+  Write-Host "verify:  npm view $($pkg.name) version"
+  Write-Host "install: dsh plugin --profile web add $($pkg.name)"
 } finally {
   Pop-Location
 }
